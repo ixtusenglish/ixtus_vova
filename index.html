@@ -11,7 +11,7 @@ main{max-width:1000px;margin:auto;padding:10px}.note{font-size:12px;color:#68748
 @media(max-width:720px){.grid{grid-template-columns:1fr}main{padding:8px}}
 </style></head><body>
 <header><h1>IXTUS VOCA · 고등 ADVANCED 2026</h1><nav><a href="#d01">01</a><a href="#d02">02</a><a href="#d03">03</a><a href="#d04">04</a><a href="#d05">05</a><a href="#d06">06</a><a href="#d07">07</a><a href="#d08">08</a><a href="#d09">09</a><a href="#d10">10</a><a href="#d11">11</a><a href="#d12">12</a><a href="#d13">13</a><a href="#d14">14</a><a href="#d15">15</a><a href="#d16">16</a><a href="#d17">17</a><a href="#d18">18</a><a href="#d19">19</a><a href="#d20">20</a><a href="#d21">21</a><a href="#d22">22</a><a href="#d23">23</a><a href="#d24">24</a><a href="#d25">25</a><a href="#d26">26</a><a href="#d27">27</a><a href="#d28">28</a><a href="#d29">29</a><a href="#d30">30</a></nav></header>
-<main><p class="note">🔊를 한 번 탭하면 해당 표제어의 영어 발음이 바로 재생됩니다.</p><section id="d01"><h2>DAY 01<small>40 WORDS</small></h2><div class="grid"><div class="card">
+<main><p class="note">🔊를 한 번 탭하면 영어 발음이 재생됩니다. 갤럭시에서 소리가 나지 않으면 Chrome 또는 Samsung Internet으로 직접 열어 주세요.</p><section id="d01"><h2>DAY 01<small>40 WORDS</small></h2><div class="grid"><div class="card">
 <div class="no">01</div>
 <button class="spk" type="button" onclick='speak("secure")' aria-label="secure 발음">🔊</button>
 <div class="word">secure</div><div class="meaning">안전한, 확실한, 획득하다</div></div><div class="card">
@@ -3613,6 +3613,152 @@ main{max-width:1000px;margin:auto;padding:10px}.note{font-size:12px;color:#68748
 <button class="spk" type="button" onclick='speak("constrain")' aria-label="constrain 발음">🔊</button>
 <div class="word">constrain</div><div class="meaning">제약하다, 억제하다</div></div></div></section></main>
 <script>
-let voices=[];function loadVoices(){voices=speechSynthesis.getVoices();}loadVoices();speechSynthesis.onvoiceschanged=loadVoices;
-function speak(text){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang="en-US";u.rate=.88;const v=voices.find(x=>x.lang&&x.lang.toLowerCase().startsWith("en-us"))||voices.find(x=>x.lang&&x.lang.toLowerCase().startsWith("en"));if(v)u.voice=v;speechSynthesis.speak(u);}
+(() => {
+  "use strict";
+
+  const synth = window.speechSynthesis;
+  let voices = [];
+  let requestId = 0;
+
+  function refreshVoices() {
+    if (!synth) return [];
+    try {
+      voices = synth.getVoices() || [];
+    } catch (_) {
+      voices = [];
+    }
+    return voices;
+  }
+
+  function chooseEnglishVoice(list) {
+    return (
+      list.find(v => /^en-US$/i.test(v.lang) && v.localService) ||
+      list.find(v => /^en-US$/i.test(v.lang)) ||
+      list.find(v => /^en[-_]/i.test(v.lang) && v.localService) ||
+      list.find(v => /^en[-_]/i.test(v.lang)) ||
+      list.find(v => /^en/i.test(v.lang)) ||
+      null
+    );
+  }
+
+  function showHelp() {
+    alert(
+      "이 브라우저에서 음성 재생이 시작되지 않았습니다.\n\n" +
+      "갤럭시에서는 Chrome 또는 Samsung Internet으로 이 페이지를 직접 열어 주세요. " +
+      "네이버 앱 안의 내장 브라우저에서는 음성 기능이 제한될 수 있습니다.\n\n" +
+      "또한 휴대폰의 '설정 → 일반 → 글자 읽어주기(Text-to-speech)'에서 " +
+      "Google 또는 Samsung 음성 엔진이 활성화되어 있는지 확인해 주세요."
+    );
+  }
+
+  function speakAttempt(text, preferNamedVoice, isRetry, id) {
+    if (!synth || typeof window.SpeechSynthesisUtterance === "undefined") {
+      showHelp();
+      return;
+    }
+
+    try {
+      if (synth.paused) synth.resume();
+      if (synth.speaking || synth.pending) synth.cancel();
+    } catch (_) {}
+
+    const utterance = new SpeechSynthesisUtterance(String(text));
+    utterance.lang = "en-US";
+    utterance.rate = 0.88;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    const list = refreshVoices();
+    const voice = chooseEnglishVoice(list);
+    if (preferNamedVoice && voice) {
+      utterance.voice = voice;
+    }
+
+    let started = false;
+    let finished = false;
+
+    utterance.onstart = () => {
+      started = true;
+    };
+
+    utterance.onend = () => {
+      finished = true;
+    };
+
+    utterance.onerror = () => {
+      if (id !== requestId || finished) return;
+
+      // 첫 시도가 실패하면 특정 voice 지정 없이 기기 기본 영어 TTS로 한 번 더 시도
+      if (!isRetry) {
+        setTimeout(() => {
+          if (id === requestId) {
+            speakAttempt(text, false, true, id);
+          }
+        }, 80);
+      } else {
+        showHelp();
+      }
+    };
+
+    try {
+      synth.speak(utterance);
+      // 일부 Android 기기에서 일시정지 상태로 남는 경우를 해제
+      setTimeout(() => {
+        try {
+          if (id === requestId && synth.paused) synth.resume();
+        } catch (_) {}
+      }, 120);
+
+      // 오류 이벤트 없이 재생이 시작되지 않는 WebView/내장 브라우저 대응
+      setTimeout(() => {
+        if (id !== requestId || started || finished) return;
+        let active = false;
+        try {
+          active = synth.speaking || synth.pending;
+        } catch (_) {}
+
+        if (!active) {
+          if (!isRetry) {
+            speakAttempt(text, false, true, id);
+          } else {
+            showHelp();
+          }
+        }
+      }, 2200);
+    } catch (_) {
+      if (!isRetry) {
+        speakAttempt(text, false, true, id);
+      } else {
+        showHelp();
+      }
+    }
+  }
+
+  // 기존 모든 🔊 버튼이 호출하는 함수
+  window.S = function (text) {
+    requestId += 1;
+    refreshVoices();
+    speakAttempt(text, true, false, requestId);
+  };
+
+  if (synth) {
+    refreshVoices();
+
+    // Chrome / Samsung Internet에서 음성 목록이 늦게 로딩되는 경우 대응
+    if (typeof synth.addEventListener === "function") {
+      synth.addEventListener("voiceschanged", refreshVoices);
+    } else {
+      synth.onvoiceschanged = refreshVoices;
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        refreshVoices();
+        try {
+          if (synth.paused) synth.resume();
+        } catch (_) {}
+      }
+    });
+  }
+})();
 </script></body></html>
