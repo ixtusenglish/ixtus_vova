@@ -3741,6 +3741,9 @@ main{max-width:1000px;margin:auto;padding:10px}.note{font-size:12px;color:#68748
     speakAttempt(text, true, false, requestId);
   };
 
+  // 기존 IXTUS VOCA ADVANCED 버튼은 speak(...)를 호출하므로 동일 함수에 연결
+  window.speak = window.S;
+
   if (synth) {
     refreshVoices();
 
